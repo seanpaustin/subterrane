@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
 
 import base64
-import hashlib
 import logging
 import sys
 import traceback
 
-from flask import Flask, render_template, request, session
+from flask import Flask, request, session
 from flask_socketio import SocketIO
 
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 
+
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'secret!'
-socketio = SocketIO(app, logger=True, engineio_logger=True)
+app.config['SECRET_KEY'] = "secret!"
+socketio = SocketIO(app, logger=True, engineio_logger=True, cors_allowed_origins="*")
+
 
 @socketio.event
 def connect(auth):
@@ -55,25 +56,30 @@ def connect(auth):
 
     return True
 
+
 @socketio.event
 def disconnect():
     logging.info("client disconnected")
+
 
 @socketio.event
 def push(args):
     args['public_key'] = session['public_key']
     socketio.emit('peer_updated', args, skip_sid=request.sid)
 
+
 @socketio.event
 def query(args):
     args['public_key'] = session['public_key']
     socketio.emit('peer_queries', args, skip_sid=request.sid)
+
 
 @socketio.event
 def blab(args):
     args['public_key'] = session['public_key']
     socketio.emit('peer_blabs', args, skip_sid=request.sid)
 
+
 if __name__ == '__main__':
     port = int(sys.argv[1])
-    socketio.run(app, port=port)
+    socketio.run(app, port=port, allow_unsafe_werkzeug=True)

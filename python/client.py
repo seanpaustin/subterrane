@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 
-import logging
-
 import socketio
 
 
@@ -42,10 +40,12 @@ class Connection:
         self.client.on('peer_queries', self.on_peer_queries)
         self.client.on('peer_blabs', self.on_peer_blabs)
 
-    def on_connect(self):
+    @staticmethod
+    def on_connect():
         logging.warning("connect successful")
 
-    def on_disconnect(self):
+    @staticmethod
+    def on_disconnect():
         logging.warning("server disconnected")
 
     def on_peer_updated(self, args):
@@ -68,6 +68,7 @@ class Connection:
         public_key = args['public_key']
         service = args['service']
 
+        known = None
         if public_key == self.my_public_key:
             known = self.my_state.branches['local'].get(service)
         elif public_key in peer_states:
@@ -145,36 +146,35 @@ if __name__ == '__main__':
         hashes.SHA256()
     )
 
-    public_key = public_key_data.decode('utf8')
-    my_state = PeerState(public_key)
+    main_public_key = public_key_data.decode('utf8')
+    main_state = PeerState(main_public_key)
 
     connections = {}
-    for url in client_urls:
-        connections[url] = Connection(url, public_key, my_state)
+    for client_url in client_urls:
+        connections[client_url] = Connection(client_url, main_public_key, main_state)
 
-    auth = {
-        'public_key': public_key,
+    main_auth = {
+        'public_key': main_public_key,
         'hashed_salt': hashed_salt,
         'signature': base64.b64encode(signature).decode('utf8')
     }
-    logging.warning("auth: %s", json.dumps(auth))
+    logging.warning("auth: %s", json.dumps(main_auth))
 
-    for url, connection in connections.items():
-        connection.connect(auth=auth)
+    for _, connection in connections.items():
+        connection.connect(auth=main_auth)
 
     time.sleep(1)  # give a chance for all connections to be established
 
     if handle == "query":
-        kwargs = {'service': "demographic", 'selector': public_key}
-        for url, connection in connections.items():
-            connection.query(**kwargs)
+        demographics_query = {'service': "demographic", 'selector': main_public_key}
+        for _, connection in connections.items():
+            connection.query(**demographics_query)
     else:
-        kwargs = {'service': "demographic", 'handle': handle}
-        my_state.update("local", "demographic", kwargs)
-        for url, connection in connections.items():
-            connection.push(**kwargs)
+        handle_update = {'service': "demographic", 'handle': handle}
+        main_state.update("local", "demographic", handle_update)
+        for _, connection in connections.items():
+            connection.push(**handle_update)
 
-    while(any([connection.is_connected for connection in connections.values()])):
+    while any([connection.is_connected for connection in connections.values()]):
         time.sleep(1)
     logging.warning("all connections closed, shutting down")
-
